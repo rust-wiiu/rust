@@ -199,6 +199,13 @@ pub(crate) mod key {
             use moto_rt::tls::{create, destroy};
             pub(super) use racy::LazyKey;
         }
+        target_os = "cafe" => {
+            mod racy;
+            mod cafe;
+            pub(super) use racy::LazyKey;
+            pub(super) use cafe::{Key, get, set};
+            use cafe::{create, destroy};
+        }
         _ => {}
     }
 }

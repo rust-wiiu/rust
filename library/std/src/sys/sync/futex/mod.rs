@@ -35,5 +35,9 @@ cfg_select! {
     target_os = "motor" => {
         pub use moto_rt::futex::*;
     }
+    target_os = "cafe" => {
+        mod cafe;
+        pub use cafe::*;
+    }
     _ => {}
 }

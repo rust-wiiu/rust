@@ -31,7 +31,7 @@ cfg_select! {
         mod xous;
         pub use xous::*;
     }
-    any(target_os = "vexos", target_family = "wasm", target_os = "zkvm", target_os = "trusty") => {
+    any(target_os = "vexos", target_family = "wasm", target_os = "zkvm", target_os = "trusty", target_os = "cafe") => {
         mod generic;
         pub use generic::*;
     }

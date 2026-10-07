@@ -1648,6 +1648,8 @@ supported_targets! {
 
     ("aarch64-nintendo-switch-freestanding", aarch64_nintendo_switch_freestanding),
 
+    ("powerpc-nintendo-cafe", powerpc_nintendo_cafe),
+
     ("armv7-sony-vita-newlibeabihf", armv7_sony_vita_newlibeabihf),
 
     ("armv7-unknown-linux-uclibceabi", armv7_unknown_linux_uclibceabi),
@@ -1848,6 +1850,7 @@ crate::target_spec_enum! {
         Aix = "aix",
         AmdHsa = "amdhsa",
         Android = "android",
+        Cafe = "cafe",
         Cuda = "cuda",
         Cygwin = "cygwin",
         Dragonfly = "dragonfly",
