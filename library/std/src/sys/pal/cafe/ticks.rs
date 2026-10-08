@@ -1,4 +1,3 @@
-#![expect(dead_code)]
 use super::abi;
 use crate::time::Duration;
 

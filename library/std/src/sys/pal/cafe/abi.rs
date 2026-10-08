@@ -63,7 +63,9 @@ imports_section!(
         "OSReport",
         "OSConsoleWrite",
         "OSGetSystemInfo",
-        "OSGetTime"
+        "OSGetTime",
+        "OSYieldThread",
+        "OSGetCoreCount"
     ],
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
@@ -87,6 +89,9 @@ unsafe extern "C" {
     pub fn OSGetSystemInfo() -> *const OSSystemInfo;
     /// Ticks since 2000-01-01 00:00.
     pub fn OSGetTime() -> i64;
+
+    pub fn OSYieldThread();
+    pub fn OSGetCoreCount() -> u32;
 }
 
 #[repr(C)]
