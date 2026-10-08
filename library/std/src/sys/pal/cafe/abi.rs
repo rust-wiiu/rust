@@ -65,7 +65,16 @@ imports_section!(
         "OSGetSystemInfo",
         "OSGetTime",
         "OSYieldThread",
-        "OSGetCoreCount"
+        "OSGetCoreCount",
+        "OSCreateThread",
+        "OSResumeThread",
+        "OSJoinThread",
+        "OSDetachThread",
+        "OSGetCurrentThread",
+        "OSGetThreadPriority",
+        "OSSetThreadDeallocator",
+        "OSSetThreadName",
+        "OSGetThreadName"
     ],
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
@@ -92,6 +101,28 @@ unsafe extern "C" {
 
     pub fn OSYieldThread();
     pub fn OSGetCoreCount() -> u32;
+
+    pub fn OSCreateThread(
+        thread: *mut OSThread,
+        entry: OSThreadProc,
+        int_arg: i32,
+        ptr_arg: *mut c_void,
+        stack_top: *mut c_void,
+        stack_size: u32,
+        priority: i32,
+        attr: u16,
+    ) -> i32;
+    pub fn OSResumeThread(thread: *mut OSThread) -> i32;
+    pub fn OSJoinThread(thread: *mut OSThread, result: *mut i32) -> i32;
+    pub fn OSDetachThread(thread: *mut OSThread);
+    pub fn OSGetCurrentThread() -> *mut OSThread;
+    pub fn OSGetThreadPriority(thread: *mut OSThread) -> i32;
+    pub fn OSSetThreadDeallocator(
+        thread: *mut OSThread,
+        dealloc: OSThreadDeallocator,
+    ) -> Option<OSThreadDeallocator>;
+    pub fn OSSetThreadName(thread: *mut OSThread, name: *const c_char);
+    pub fn OSGetThreadName(thread: *const OSThread) -> *const c_char;
 }
 
 #[repr(C)]
@@ -103,3 +134,9 @@ pub struct OSSystemInfo {
     pub l2_size: [u32; 3],
     pub cpu_freq_ratio: u32,
 }
+
+#[repr(C, align(8))]
+pub struct OSThread([u8; 0x6A0]);
+
+pub type OSThreadProc = extern "C" fn(int_arg: i32, ptr_arg: *mut c_void) -> i32;
+pub type OSThreadDeallocator = extern "C" fn(thread: *mut OSThread, stack_end: *mut c_void);
