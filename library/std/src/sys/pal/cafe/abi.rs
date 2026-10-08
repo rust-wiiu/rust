@@ -54,11 +54,19 @@ macro_rules! imports_section {
 
 imports_section!(
     "coreinit",
-    ["exit", "OSGetSystemTime", "OSSleepTicks", "OSGetThreadSpecific", "OSSetThreadSpecific"],
+    [
+        "exit",
+        "OSGetSystemTime",
+        "OSSleepTicks",
+        "OSGetThreadSpecific",
+        "OSSetThreadSpecific",
+        "OSReport",
+        "OSConsoleWrite"
+    ],
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
 
-use crate::ffi::c_void;
+use crate::ffi::{c_char, c_void};
 
 unsafe extern "C" {
     pub fn exit(code: i32) -> !;
@@ -70,4 +78,7 @@ unsafe extern "C" {
     pub static MEMAllocFromDefaultHeapEx:
         unsafe extern "C" fn(size: u32, align: i32) -> *mut c_void;
     pub static MEMFreeToDefaultHeap: unsafe extern "C" fn(ptr: *mut c_void);
+
+    // pub unsafe fn OSReport(msg: *const c_char);
+    pub unsafe fn OSConsoleWrite(msg: *const c_char, size: u32);
 }

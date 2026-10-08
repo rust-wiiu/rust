@@ -45,6 +45,10 @@ cfg_select! {
         mod zkvm;
         pub use zkvm::*;
     }
+    target_os = "cafe" => {
+        mod cafe;
+        pub use cafe::*;
+    }
     _ => {
         mod unsupported;
         pub use unsupported::*;

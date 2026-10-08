@@ -35,7 +35,7 @@ SECTIONS
    /* Data Sections - Single segment at 0x10000000 */
    . = ORIGIN(datamem);
 
-   .rodata ALIGN(8) : {
+   .rodata ALIGN(32) : {
       /* PowerPC small data sections */
       *(.sdata2 .sdata2.* .gnu.linkonce.s2.*)
       *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*)
@@ -57,7 +57,7 @@ SECTIONS
    } > datamem
 
    /* Exception frame information - same segment as .rodata */
-   .eh_frame ALIGN(4) : {
+   .eh_frame ALIGN(32) : {
       *(.eh_frame_hdr)
       *(.eh_frame_entry .eh_frame_entry.*)
       KEEP (*(.eh_frame))
@@ -65,7 +65,7 @@ SECTIONS
    } > datamem
 
    /* Initialized data - same segment */
-   .data ALIGN(4) : {
+   .data ALIGN(32) : {
       PROVIDE(__data_start = .);
       *(.data .data.* .gnu.linkonce.d.*)
       SORT(CONSTRUCTORS)
@@ -75,7 +75,7 @@ SECTIONS
    } > datamem
 
    /* Uninitialized data - same segment */
-   .bss ALIGN(4) (NOLOAD) : {
+   .bss ALIGN(64) (NOLOAD) : {
       *(.dynsbss)
       *(.sbss .sbss.* .gnu.linkonce.sb.*)
       *(.scommon)

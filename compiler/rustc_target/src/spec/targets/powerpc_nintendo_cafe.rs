@@ -42,6 +42,7 @@ pub(crate) fn target() -> Target {
             max_atomic_width: Some(32),
             supports_stack_protector: false,
             exe_suffix: ".elf".into(),
+            emit_debug_gdb_scripts: false,
             ..Default::default()
         },
     }
