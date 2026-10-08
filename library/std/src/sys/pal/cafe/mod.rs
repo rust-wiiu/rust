@@ -2,7 +2,7 @@
 #[path = "../unsupported/common.rs"]
 mod unsupported_common;
 
-pub use unsupported_common::{abort_internal, cleanup, init, unsupported};
+pub use unsupported_common::{abort_internal, cleanup, init, unsupported, unsupported_err};
 
 pub mod abi;
 pub mod ticks;

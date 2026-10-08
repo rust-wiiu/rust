@@ -54,4 +54,8 @@ impl SystemTime {
     pub fn checked_sub_duration(&self, other: &Duration) -> Option<SystemTime> {
         Some(SystemTime(self.0.checked_sub(*other)?))
     }
+
+    pub(crate) const fn from_unix(since_epoch: Duration) -> SystemTime {
+        SystemTime(since_epoch)
+    }
 }
