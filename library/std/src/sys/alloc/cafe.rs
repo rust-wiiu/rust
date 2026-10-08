@@ -3,7 +3,9 @@ use crate::sys::pal::abi;
 
 #[inline]
 pub unsafe fn alloc(layout: Layout) -> *mut u8 {
-    unsafe { abi::MEMAllocFromDefaultHeapEx(layout.size() as u32, layout.align() as i32).cast() }
+    unsafe {
+        abi::MEMAllocFromDefaultHeapEx(layout.size() as u32, layout.align().max(4) as i32).cast()
+    }
 }
 
 #[inline]
