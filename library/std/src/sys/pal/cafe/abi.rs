@@ -74,7 +74,13 @@ imports_section!(
         "OSGetThreadPriority",
         "OSSetThreadDeallocator",
         "OSSetThreadName",
-        "OSGetThreadName"
+        "OSGetThreadName",
+        "OSFastMutex_Lock",
+        "OSFastMutex_Unlock",
+        "OSInitEvent",
+        "OSWaitEvent",
+        "OSWaitEventWithTimeout",
+        "OSSignalEvent"
     ],
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
@@ -123,6 +129,13 @@ unsafe extern "C" {
     ) -> Option<OSThreadDeallocator>;
     pub fn OSSetThreadName(thread: *mut OSThread, name: *const c_char);
     pub fn OSGetThreadName(thread: *const OSThread) -> *const c_char;
+
+    pub fn OSFastMutex_Lock(mutex: *mut OSFastMutex);
+    pub fn OSFastMutex_Unlock(mutex: *mut OSFastMutex);
+    pub fn OSInitEvent(event: *mut OSEvent, initial_state: i32, mode: i32);
+    pub fn OSWaitEvent(event: *mut OSEvent);
+    pub fn OSWaitEventWithTimeout(event: *mut OSEvent, timeout_ns: i64) -> i32;
+    pub fn OSSignalEvent(event: *mut OSEvent);
 }
 
 #[repr(C)]
@@ -140,3 +153,17 @@ pub struct OSThread([u8; 0x6A0]);
 
 pub type OSThreadProc = extern "C" fn(int_arg: i32, ptr_arg: *mut c_void) -> i32;
 pub type OSThreadDeallocator = extern "C" fn(thread: *mut OSThread, stack_end: *mut c_void);
+
+#[repr(C)]
+pub struct OSFastMutex([u32; 11]);
+impl OSFastMutex {
+    pub const ZEROED: Self = Self([0x664D7458, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[repr(C)]
+pub struct OSEvent([u32; 9]);
+impl OSEvent {
+    pub const ZEROED: Self = Self([0x65566E54, 0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+pub const OS_EVENT_MANUAL: i32 = 0;

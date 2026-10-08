@@ -118,7 +118,7 @@ extern "C" fn thread_start(_int_arg: i32, data: *mut c_void) -> i32 {
     let init = unsafe { Box::from_raw(data.cast::<ThreadInit>()) };
     let rust_start = init.init();
     rust_start();
-    // FIXME(cafe): thread-local destructors are not run, see thread_local/key/cafe.rs.
+    crate::sys::thread_local::key::run_dtors();
     crate::rt::thread_cleanup();
     0
 }

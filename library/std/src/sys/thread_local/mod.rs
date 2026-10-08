@@ -204,6 +204,7 @@ pub(crate) mod key {
             mod cafe;
             pub(super) use racy::LazyKey;
             pub(super) use cafe::{Key, get, set};
+            pub(crate) use cafe::run_dtors;
             use cafe::{create, destroy};
         }
         _ => {}
