@@ -5,6 +5,7 @@ mod unsupported_common;
 pub use unsupported_common::{abort_internal, cleanup, init, unsupported};
 
 pub mod abi;
+pub mod ticks;
 
 #[cfg(not(test))]
 #[unsafe(no_mangle)]

@@ -36,6 +36,10 @@ cfg_select! {
         mod xous;
         use xous as imp;
     }
+    target_os = "cafe" => {
+        mod cafe;
+        use cafe as imp;
+    }
     _ => {
         mod unsupported;
         use unsupported as imp;

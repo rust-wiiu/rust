@@ -61,7 +61,9 @@ imports_section!(
         "OSGetThreadSpecific",
         "OSSetThreadSpecific",
         "OSReport",
-        "OSConsoleWrite"
+        "OSConsoleWrite",
+        "OSGetSystemInfo",
+        "OSGetTime"
     ],
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
@@ -81,4 +83,18 @@ unsafe extern "C" {
 
     // pub unsafe fn OSReport(msg: *const c_char);
     pub unsafe fn OSConsoleWrite(msg: *const c_char, size: u32);
+
+    pub fn OSGetSystemInfo() -> *const OSSystemInfo;
+    /// Ticks since 2000-01-01 00:00.
+    pub fn OSGetTime() -> i64;
+}
+
+#[repr(C)]
+pub struct OSSystemInfo {
+    pub bus_clock_speed: u32,
+    pub core_clock_speed: u32,
+    /// Ticks from 2000-01-01 until system reset.
+    pub time_base: i64,
+    pub l2_size: [u32; 3],
+    pub cpu_freq_ratio: u32,
 }
