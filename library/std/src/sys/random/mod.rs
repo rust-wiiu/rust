@@ -97,12 +97,15 @@ cfg_select! {
         mod zkvm;
         pub use zkvm::fill_bytes;
     }
+    target_os = "cafe" => {
+        mod cafe;
+        pub use cafe::fill_bytes;
+    }
     any(
         all(target_family = "wasm", target_os = "unknown"),
         target_os = "xous",
         target_os = "vexos",
         target_os = "l4re",
-        target_os = "cafe",
     ) => {
         // FIXME: finally remove std support for wasm32-unknown-unknown
         // FIXME: add random data generation to xous
@@ -120,7 +123,6 @@ cfg_select! {
     target_os = "xous",
     target_os = "vexos",
     target_os = "l4re",
-    target_os = "cafe",
 )))]
 pub fn hashmap_random_keys() -> (u64, u64) {
     let mut buf = [0; 16];

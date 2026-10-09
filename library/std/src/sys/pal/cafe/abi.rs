@@ -139,6 +139,8 @@ imports_section!(
 
 imports_section!("nn_ac", ["ACInitialize", "ACConnect"], []);
 
+imports_section!("nlibnss", ["NSSInit", "NSSGetRandom"], []);
+
 use crate::ffi::{c_char, c_void};
 
 unsafe extern "C" {
@@ -340,6 +342,9 @@ unsafe extern "C" {
     pub fn TEMPInit() -> i32;
     pub fn TEMPCreateAndInitTempDir(max_size: u32, pref: u32, dir_id: *mut u64) -> i32;
     pub fn TEMPGetDirGlobalPath(dir_id: u64, path: *mut c_char, len: u32) -> i32;
+
+    pub fn NSSInit() -> i32;
+    pub fn NSSGetRandom(buf: *mut u8, len: i32) -> i32;
 }
 
 #[repr(C)]
