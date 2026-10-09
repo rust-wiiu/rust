@@ -127,14 +127,14 @@ cfg_select! {
         pub use unsupported::{current_os_id, set_name};
     }
     target_os = "cafe" => {
-            mod cafe;
-            pub use cafe::{
-                DEFAULT_MIN_STACK_SIZE, Thread, available_parallelism, set_name, sleep, yield_now,
-            };
-            #[expect(dead_code)]
-            mod unsupported;
-            pub use unsupported::current_os_id;
-        }
+        mod cafe;
+        pub use cafe::{
+            DEFAULT_MIN_STACK_SIZE, Thread, available_parallelism, set_name, sleep, yield_now,
+        };
+        #[expect(dead_code)]
+        mod unsupported;
+        pub use unsupported::current_os_id;
+    }
     _ => {
         mod unsupported;
         pub use unsupported::{

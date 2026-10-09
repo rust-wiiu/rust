@@ -259,7 +259,8 @@ impl Iterator for ReadDir {
                 return Some(Err(e));
             }
             let entry = unsafe { entry.assume_init() };
-            let name = CStr::from_bytes_until_nul(&entry.name).map_or(&entry.name[..], CStr::to_bytes);
+            let name =
+                CStr::from_bytes_until_nul(&entry.name).map_or(&entry.name[..], CStr::to_bytes);
             if name == b"." || name == b".." {
                 continue;
             }
@@ -433,7 +434,12 @@ impl File {
             while remaining > 0 {
                 let len = remaining.min(chunk as u64) as usize;
                 match self.write_raw(zeros.as_ptr().cast(), len)? {
-                    0 => return Err(io::const_error!(io::ErrorKind::WriteZero, "failed to extend file")),
+                    0 => {
+                        return Err(io::const_error!(
+                            io::ErrorKind::WriteZero,
+                            "failed to extend file"
+                        ));
+                    }
                     n => remaining -= n as u64,
                 }
             }
@@ -572,7 +578,9 @@ impl DirBuilder {
 
 fn stat_cstr(path: &CStr) -> io::Result<FileAttr> {
     let mut stat = MaybeUninit::<FSStat>::uninit();
-    run(|c, b| unsafe { abi::FSGetStat(c, b, path.as_ptr(), stat.as_mut_ptr(), FS_RET_ALL_ERROR) })?;
+    run(|c, b| unsafe {
+        abi::FSGetStat(c, b, path.as_ptr(), stat.as_mut_ptr(), FS_RET_ALL_ERROR)
+    })?;
     Ok(FileAttr(unsafe { stat.assume_init() }))
 }
 
@@ -616,10 +624,8 @@ pub fn rmdir(path: &Path) -> io::Result<()> {
 pub fn rename(old: &Path, new: &Path) -> io::Result<()> {
     with_path(old, &|old| {
         with_path(new, &|new| {
-            run(|c, b| unsafe {
-                abi::FSRename(c, b, old.as_ptr(), new.as_ptr(), FS_RET_ALL_ERROR)
-            })
-            .map(drop)
+            run(|c, b| unsafe { abi::FSRename(c, b, old.as_ptr(), new.as_ptr(), FS_RET_ALL_ERROR) })
+                .map(drop)
         })
     })
 }
@@ -644,7 +650,13 @@ pub fn getcwd() -> io::Result<PathBuf> {
     // One spare byte, so the path is always nul-terminated.
     let mut buf = [0u8; abi::FS_MAX_FULLPATH_SIZE + 1];
     run(|c, b| unsafe {
-        abi::FSGetCwd(c, b, buf.as_mut_ptr().cast(), abi::FS_MAX_FULLPATH_SIZE as u32, FS_RET_ALL_ERROR)
+        abi::FSGetCwd(
+            c,
+            b,
+            buf.as_mut_ptr().cast(),
+            abi::FS_MAX_FULLPATH_SIZE as u32,
+            FS_RET_ALL_ERROR,
+        )
     })?;
     let mut len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
     if len > 1 && buf[len - 1] == b'/' {

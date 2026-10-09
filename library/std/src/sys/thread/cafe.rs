@@ -1,13 +1,12 @@
 use crate::alloc::Layout;
 use crate::ffi::{CStr, c_void};
-use crate::io;
 use crate::num::NonZero;
-use crate::ptr;
 // use crate::sync::Mutex;
 use crate::sys::pal::abi;
 use crate::sys::pal::ticks::duration_to_ticks;
 use crate::thread::ThreadInit;
 use crate::time::Duration;
+use crate::{io, ptr};
 
 pub fn sleep(dur: Duration) {
     unsafe { abi::OSSleepTicks(duration_to_ticks(dur)) }

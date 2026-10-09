@@ -62,12 +62,8 @@ fn bucket(futex: &Atomic<u32>) -> &'static Bucket {
 
 pub fn futex_wait(futex: &Atomic<u32>, expected: u32, timeout: Option<Duration>) -> bool {
     let bucket = bucket(futex);
-    let mut waiter = Waiter {
-        futex,
-        event: abi::OSEvent::ZEROED,
-        next: ptr::null_mut(),
-        woken: false,
-    };
+    let mut waiter =
+        Waiter { futex, event: abi::OSEvent::ZEROED, next: ptr::null_mut(), woken: false };
     let waiter = &raw mut waiter;
     let event = unsafe { &raw mut (*waiter).event };
     unsafe { abi::OSInitEvent(event, 0, abi::OS_EVENT_MANUAL) };

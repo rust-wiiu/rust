@@ -22,7 +22,11 @@ pub fn temp_dir() -> PathBuf {
             if status != 0 {
                 status
             } else {
-                abi::TEMPGetDirGlobalPath(id, buf.as_mut_ptr().cast(), abi::FS_MAX_FULLPATH_SIZE as u32)
+                abi::TEMPGetDirGlobalPath(
+                    id,
+                    buf.as_mut_ptr().cast(),
+                    abi::FS_MAX_FULLPATH_SIZE as u32,
+                )
             }
         };
         if status != 0 {

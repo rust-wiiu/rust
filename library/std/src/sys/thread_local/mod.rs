@@ -202,10 +202,10 @@ pub(crate) mod key {
         target_os = "cafe" => {
             mod racy;
             mod cafe;
-            pub(super) use racy::LazyKey;
-            pub(super) use cafe::{Key, get, set};
             pub(crate) use cafe::run_dtors;
+            pub(super) use cafe::{Key, get, set};
             use cafe::{create, destroy};
+            pub(super) use racy::LazyKey;
         }
         _ => {}
     }
