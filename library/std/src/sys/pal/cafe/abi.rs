@@ -108,6 +108,8 @@ imports_section!(
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
 
+imports_section!("nn_temp", ["TEMPInit", "TEMPCreateAndInitTempDir", "TEMPGetDirGlobalPath"], []);
+
 use crate::ffi::{c_char, c_void};
 
 unsafe extern "C" {
@@ -264,6 +266,10 @@ unsafe extern "C" {
         len: u32,
         err_mask: u32,
     ) -> i32;
+
+    pub fn TEMPInit() -> i32;
+    pub fn TEMPCreateAndInitTempDir(max_size: u32, pref: u32, dir_id: *mut u64) -> i32;
+    pub fn TEMPGetDirGlobalPath(dir_id: u64, path: *mut c_char, len: u32) -> i32;
 }
 
 #[repr(C)]
@@ -354,3 +360,5 @@ pub const FS_STATUS_FILE_TOO_BIG: i32 = -11;
 pub const FS_STATUS_STORAGE_FULL: i32 = -12;
 pub const FS_STATUS_UNSUPPORTED_CMD: i32 = -14;
 pub const FS_STATUS_WRITE_PROTECTED: i32 = -19;
+
+pub const TEMP_DEVICE_PREFERENCE_FREE_SPACE: u32 = 0;
