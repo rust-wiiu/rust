@@ -10,6 +10,7 @@
     target_os = "uefi",
     target_os = "wasi",
     target_os = "xous",
+    target_os = "cafe",
 ))]
 mod common;
 
@@ -63,6 +64,10 @@ cfg_select! {
     target_os = "zkvm" => {
         mod zkvm;
         pub use zkvm::*;
+    }
+    target_os = "cafe" => {
+        mod cafe;
+        pub use cafe::*;
     }
     _ => {
         mod unsupported;

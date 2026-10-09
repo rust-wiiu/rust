@@ -103,7 +103,8 @@ imports_section!(
         "FSRemove",
         "FSRename",
         "FSChangeDir",
-        "FSGetCwd"
+        "FSGetCwd",
+        "OSGetArgcArgv"
     ],
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
@@ -345,6 +346,8 @@ unsafe extern "C" {
 
     pub fn NSSInit() -> i32;
     pub fn NSSGetRandom(buf: *mut u8, len: i32) -> i32;
+
+    pub fn OSGetArgcArgv(argc: *mut i32, argv: *mut *const *const c_char);
 }
 
 #[repr(C)]
