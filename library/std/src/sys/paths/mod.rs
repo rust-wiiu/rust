@@ -58,6 +58,17 @@ cfg_select! {
         mod windows;
         use windows as imp;
     }
+    target_os = "cafe" => {
+        #[expect(dead_code)]
+        mod unsupported;
+        mod imp {
+            pub use super::unsupported::{
+                JoinPathsError, SplitPaths, SplitPathsRef, current_exe, home_dir, join_paths,
+                split_paths, split_paths_ref, temp_dir,
+            };
+            pub use crate::sys::fs::{chdir, getcwd};
+        }
+    }
     _ => {
         mod unsupported;
         use unsupported as imp;

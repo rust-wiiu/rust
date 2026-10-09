@@ -50,6 +50,7 @@ cfg_select! {
     target_os = "cafe" => {
         mod cafe;
         use cafe as imp;
+        pub use cafe::{chdir, getcwd};
     }
     _ => {
         mod unsupported;

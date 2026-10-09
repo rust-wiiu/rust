@@ -101,7 +101,9 @@ imports_section!(
         "FSCloseDir",
         "FSMakeDir",
         "FSRemove",
-        "FSRename"
+        "FSRename",
+        "FSChangeDir",
+        "FSGetCwd"
     ],
     ["MEMAllocFromDefaultHeapEx", "MEMFreeToDefaultHeap"]
 );
@@ -253,6 +255,15 @@ unsafe extern "C" {
         new_path: *const c_char,
         err_mask: u32,
     ) -> i32;
+
+    pub fn FSChangeDir(client: *mut FSClient, block: *mut FSCmdBlock, path: *const c_char, err_mask: u32) -> i32;
+    pub fn FSGetCwd(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        path: *mut c_char,
+        len: u32,
+        err_mask: u32,
+    ) -> i32;
 }
 
 #[repr(C)]
@@ -323,7 +334,8 @@ pub struct FSDirEntry {
 pub const FS_RET_ALL_ERROR: u32 = u32::MAX;
 pub const FS_SOURCETYPE_EXTERNAL: u32 = 0;
 pub const FS_MAX_MOUNTPATH_SIZE: usize = 128;
-pub const FS_MAX_ARGPATH_SIZE: usize = 639;
+pub const FS_MAX_FULLPATH_SIZE: usize = 639;
+pub const FS_MAX_ARGPATH_SIZE: usize = FS_MAX_FULLPATH_SIZE;
 
 pub const FS_STAT_DIRECTORY: u32 = 0x8000_0000;
 pub const FS_STAT_CTIME: u32 = 0x0800_0000;

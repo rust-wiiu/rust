@@ -640,6 +640,29 @@ pub fn lstat(path: &Path) -> io::Result<FileAttr> {
     stat(path)
 }
 
+pub fn getcwd() -> io::Result<PathBuf> {
+    // One spare byte, so the path is always nul-terminated.
+    let mut buf = [0u8; abi::FS_MAX_FULLPATH_SIZE + 1];
+    run(|c, b| unsafe {
+        abi::FSGetCwd(c, b, buf.as_mut_ptr().cast(), abi::FS_MAX_FULLPATH_SIZE as u32, FS_RET_ALL_ERROR)
+    })?;
+    let mut len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    if len > 1 && buf[len - 1] == b'/' {
+        len -= 1;
+    }
+    Ok(PathBuf::from(OsString::from_inner(Buf { inner: buf[..len].to_vec() })))
+}
+
+pub fn chdir(path: &Path) -> io::Result<()> {
+    with_path(path, &|path| {
+        // FSChangeDir accepts any path, even missing ones and files.
+        if !stat_cstr(path)?.file_type().is_dir() {
+            return Err(io::const_error!(io::ErrorKind::NotADirectory, "not a directory"));
+        }
+        run(|c, b| unsafe { abi::FSChangeDir(c, b, path.as_ptr(), FS_RET_ALL_ERROR) }).map(drop)
+    })
+}
+
 pub fn copy(from: &Path, to: &Path) -> io::Result<u64> {
     let mut reader = crate::fs::File::open(from)?;
     if !reader.metadata()?.is_file() {
