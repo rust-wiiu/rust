@@ -77,7 +77,9 @@ pub fn cvt_gai(err: c_int) -> io::Result<()> {
     Err(match err {
         0 => return Ok(()),
         netc::EAI_AGAIN => io::const_error!(Uncategorized, "temporary failure in name resolution"),
-        netc::EAI_FAIL => io::const_error!(Uncategorized, "non-recoverable failure in name resolution"),
+        netc::EAI_FAIL => {
+            io::const_error!(Uncategorized, "non-recoverable failure in name resolution")
+        }
         netc::EAI_MEMORY => io::const_error!(Uncategorized, "memory allocation failure"),
         netc::EAI_NONAME => io::const_error!(Uncategorized, "name or service not known"),
         _ => io::const_error!(Uncategorized, "failed to look up address information"),

@@ -15,7 +15,10 @@ pub fn decode_error_kind(code: i32) -> io::ErrorKind {
     use io::ErrorKind::*;
     match code {
         netc::SO_ETIMEDOUT => TimedOut,
-        netc::SO_EOPNOTSUPP | netc::SO_EAFNOSUPPORT | netc::SO_EPROTONOSUPPORT | netc::SO_ENOPROTOOPT => Unsupported,
+        netc::SO_EOPNOTSUPP
+        | netc::SO_EAFNOSUPPORT
+        | netc::SO_EPROTONOSUPPORT
+        | netc::SO_ENOPROTOOPT => Unsupported,
         netc::SO_ECONNABORTED | netc::SO_EABORTED => ConnectionAborted,
         netc::SO_EWOULDBLOCK => WouldBlock,
         netc::SO_ECONNREFUSED => ConnectionRefused,
