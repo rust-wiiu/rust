@@ -110,6 +110,35 @@ imports_section!(
 
 imports_section!("nn_temp", ["TEMPInit", "TEMPCreateAndInitTempDir", "TEMPGetDirGlobalPath"], []);
 
+imports_section!(
+    "nsysnet",
+    [
+        "socket_lib_init",
+        "socketlasterr",
+        "socket",
+        "socketclose",
+        "connect",
+        "bind",
+        "listen",
+        "accept",
+        "recv",
+        "recvfrom",
+        "send",
+        "sendto",
+        "shutdown",
+        "getsockopt",
+        "setsockopt",
+        "getpeername",
+        "getsockname",
+        "select",
+        "getaddrinfo",
+        "freeaddrinfo"
+    ],
+    []
+);
+
+imports_section!("nn_ac", ["ACInitialize", "ACConnect"], []);
+
 use crate::ffi::{c_char, c_void};
 
 unsafe extern "C" {
@@ -188,7 +217,12 @@ unsafe extern "C" {
         handle: *mut i32,
         err_mask: u32,
     ) -> i32;
-    pub fn FSCloseFile(client: *mut FSClient, block: *mut FSCmdBlock, handle: i32, err_mask: u32) -> i32;
+    pub fn FSCloseFile(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        handle: i32,
+        err_mask: u32,
+    ) -> i32;
     pub fn FSReadFile(
         client: *mut FSClient,
         block: *mut FSCmdBlock,
@@ -209,8 +243,18 @@ unsafe extern "C" {
         flag: u32,
         err_mask: u32,
     ) -> i32;
-    pub fn FSTruncateFile(client: *mut FSClient, block: *mut FSCmdBlock, handle: i32, err_mask: u32) -> i32;
-    pub fn FSFlushFile(client: *mut FSClient, block: *mut FSCmdBlock, handle: i32, err_mask: u32) -> i32;
+    pub fn FSTruncateFile(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        handle: i32,
+        err_mask: u32,
+    ) -> i32;
+    pub fn FSFlushFile(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        handle: i32,
+        err_mask: u32,
+    ) -> i32;
     pub fn FSGetPosFile(
         client: *mut FSClient,
         block: *mut FSCmdBlock,
@@ -218,7 +262,13 @@ unsafe extern "C" {
         pos: *mut u32,
         err_mask: u32,
     ) -> i32;
-    pub fn FSSetPosFile(client: *mut FSClient, block: *mut FSCmdBlock, handle: i32, pos: u32, err_mask: u32) -> i32;
+    pub fn FSSetPosFile(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        handle: i32,
+        pos: u32,
+        err_mask: u32,
+    ) -> i32;
     pub fn FSGetStatFile(
         client: *mut FSClient,
         block: *mut FSCmdBlock,
@@ -247,9 +297,24 @@ unsafe extern "C" {
         entry: *mut FSDirEntry,
         err_mask: u32,
     ) -> i32;
-    pub fn FSCloseDir(client: *mut FSClient, block: *mut FSCmdBlock, handle: i32, err_mask: u32) -> i32;
-    pub fn FSMakeDir(client: *mut FSClient, block: *mut FSCmdBlock, path: *const c_char, err_mask: u32) -> i32;
-    pub fn FSRemove(client: *mut FSClient, block: *mut FSCmdBlock, path: *const c_char, err_mask: u32) -> i32;
+    pub fn FSCloseDir(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        handle: i32,
+        err_mask: u32,
+    ) -> i32;
+    pub fn FSMakeDir(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        path: *const c_char,
+        err_mask: u32,
+    ) -> i32;
+    pub fn FSRemove(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        path: *const c_char,
+        err_mask: u32,
+    ) -> i32;
     pub fn FSRename(
         client: *mut FSClient,
         block: *mut FSCmdBlock,
@@ -258,7 +323,12 @@ unsafe extern "C" {
         err_mask: u32,
     ) -> i32;
 
-    pub fn FSChangeDir(client: *mut FSClient, block: *mut FSCmdBlock, path: *const c_char, err_mask: u32) -> i32;
+    pub fn FSChangeDir(
+        client: *mut FSClient,
+        block: *mut FSCmdBlock,
+        path: *const c_char,
+        err_mask: u32,
+    ) -> i32;
     pub fn FSGetCwd(
         client: *mut FSClient,
         block: *mut FSCmdBlock,
@@ -362,3 +432,194 @@ pub const FS_STATUS_UNSUPPORTED_CMD: i32 = -14;
 pub const FS_STATUS_WRITE_PROTECTED: i32 = -19;
 
 pub const TEMP_DEVICE_PREFERENCE_FREE_SPACE: u32 = 0;
+
+#[expect(non_camel_case_types)]
+pub mod sockets {
+    use crate::ffi::{c_char, c_int, c_long, c_void};
+
+    pub type sa_family_t = u16;
+    pub type socklen_t = c_int;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct sockaddr {
+        pub sa_family: sa_family_t,
+        pub sa_data: [c_char; 14],
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct in_addr {
+        pub s_addr: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct sockaddr_in {
+        pub sin_family: sa_family_t,
+        pub sin_port: u16,
+        pub sin_addr: in_addr,
+        pub sin_zero: [u8; 8],
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct ip_mreq {
+        pub imr_multiaddr: in_addr,
+        pub imr_interface: in_addr,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct linger {
+        pub l_onoff: c_int,
+        pub l_linger: c_int,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct timeval {
+        pub tv_sec: c_long,
+        pub tv_usec: c_long,
+    }
+
+    /// One bit per descriptor, so `select` only handles descriptors below 32.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct fd_set {
+        pub fd_bits: u32,
+    }
+
+    #[repr(C)]
+    pub struct addrinfo {
+        pub ai_flags: c_int,
+        pub ai_family: c_int,
+        pub ai_socktype: c_int,
+        pub ai_protocol: c_int,
+        pub ai_addrlen: socklen_t,
+        pub ai_canonname: *mut c_char,
+        pub ai_addr: *mut sockaddr,
+        pub ai_next: *mut addrinfo,
+    }
+
+    pub const AF_INET: c_int = 2;
+    pub const SOCK_STREAM: c_int = 1;
+    pub const SOCK_DGRAM: c_int = 2;
+    pub const IPPROTO_IP: c_int = 0;
+    pub const IPPROTO_TCP: c_int = 6;
+    pub const MSG_PEEK: c_int = 0x2;
+    pub const SHUT_RD: c_int = 0;
+    pub const SHUT_WR: c_int = 1;
+    pub const SHUT_RDWR: c_int = 2;
+
+    pub const SOL_SOCKET: c_int = -1;
+    pub const SO_REUSEADDR: c_int = 0x0004;
+    pub const SO_KEEPALIVE: c_int = 0x0008;
+    pub const SO_BROADCAST: c_int = 0x0020;
+    pub const SO_LINGER: c_int = 0x0080;
+    pub const SO_ERROR: c_int = 0x1007;
+    pub const SO_NONBLOCK: c_int = 0x1016;
+
+    pub const IP_TTL: c_int = 4;
+    pub const IP_MULTICAST_TTL: c_int = 10;
+    pub const IP_MULTICAST_LOOP: c_int = 11;
+    pub const IP_ADD_MEMBERSHIP: c_int = 12;
+    pub const IP_DROP_MEMBERSHIP: c_int = 13;
+    pub const TCP_NODELAY: c_int = 0x2004;
+
+    pub const EAI_AGAIN: c_int = 2;
+    pub const EAI_FAIL: c_int = 4;
+    pub const EAI_MEMORY: c_int = 6;
+    pub const EAI_NONAME: c_int = 8;
+
+    pub const SO_ENOBUFS: c_int = 1;
+    pub const SO_ETIMEDOUT: c_int = 2;
+    pub const SO_EOPNOTSUPP: c_int = 4;
+    pub const SO_ECONNABORTED: c_int = 5;
+    pub const SO_EWOULDBLOCK: c_int = 6;
+    pub const SO_ECONNREFUSED: c_int = 7;
+    pub const SO_ECONNRESET: c_int = 8;
+    pub const SO_ENOTCONN: c_int = 9;
+    pub const SO_EINVAL: c_int = 11;
+    pub const SO_EMSGSIZE: c_int = 12;
+    pub const SO_EPIPE: c_int = 13;
+    pub const SO_ESHUTDOWN: c_int = 15;
+    pub const SO_ENOMEM: c_int = 18;
+    pub const SO_EADDRNOTAVAIL: c_int = 19;
+    pub const SO_EADDRINUSE: c_int = 20;
+    pub const SO_EAFNOSUPPORT: c_int = 21;
+    pub const SO_EINPROGRESS: c_int = 22;
+    pub const SO_ENETUNREACH: c_int = 30;
+    pub const SO_EPROTONOSUPPORT: c_int = 31;
+    pub const SO_EBUSY: c_int = 44;
+    pub const SO_EISCONN: c_int = 3;
+    pub const SO_EALREADY: c_int = 10;
+    pub const SO_ENOPROTOOPT: c_int = 16;
+    pub const SO_ENOTSOCK: c_int = 24;
+    pub const SO_ENORESOURCES: c_int = 48;
+    pub const SO_EABORTED: c_int = 50;
+    pub const SO_EMFILE: c_int = 51;
+
+    unsafe extern "C" {
+        pub fn socket_lib_init() -> c_int;
+        pub fn socketlasterr() -> c_int;
+        pub fn socket(family: c_int, ty: c_int, protocol: c_int) -> c_int;
+        pub fn socketclose(fd: c_int) -> c_int;
+        pub fn connect(fd: c_int, addr: *const sockaddr, len: socklen_t) -> c_int;
+        pub fn bind(fd: c_int, addr: *const sockaddr, len: socklen_t) -> c_int;
+        pub fn listen(fd: c_int, backlog: c_int) -> c_int;
+        pub fn accept(fd: c_int, addr: *mut sockaddr, len: *mut socklen_t) -> c_int;
+        pub fn recv(fd: c_int, buf: *mut c_void, len: c_int, flags: c_int) -> c_int;
+        pub fn recvfrom(
+            fd: c_int,
+            buf: *mut c_void,
+            len: c_int,
+            flags: c_int,
+            from: *mut sockaddr,
+            from_len: *mut socklen_t,
+        ) -> c_int;
+        pub fn send(fd: c_int, buf: *const c_void, len: c_int, flags: c_int) -> c_int;
+        pub fn sendto(
+            fd: c_int,
+            buf: *const c_void,
+            len: c_int,
+            flags: c_int,
+            dest: *const sockaddr,
+            dest_len: socklen_t,
+        ) -> c_int;
+        pub fn shutdown(fd: c_int, how: c_int) -> c_int;
+        pub fn getsockopt(
+            fd: c_int,
+            level: c_int,
+            name: c_int,
+            value: *mut c_void,
+            len: *mut socklen_t,
+        ) -> c_int;
+        pub fn setsockopt(
+            fd: c_int,
+            level: c_int,
+            name: c_int,
+            value: *const c_void,
+            len: socklen_t,
+        ) -> c_int;
+        pub fn getpeername(fd: c_int, addr: *mut sockaddr, len: *mut socklen_t) -> c_int;
+        pub fn getsockname(fd: c_int, addr: *mut sockaddr, len: *mut socklen_t) -> c_int;
+        pub fn select(
+            nfds: c_int,
+            readfds: *mut fd_set,
+            writefds: *mut fd_set,
+            exceptfds: *mut fd_set,
+            timeout: *mut timeval,
+        ) -> c_int;
+        pub fn getaddrinfo(
+            node: *const c_char,
+            service: *const c_char,
+            hints: *const addrinfo,
+            res: *mut *mut addrinfo,
+        ) -> c_int;
+        pub fn freeaddrinfo(res: *mut addrinfo);
+
+        pub fn ACInitialize() -> i32;
+        pub fn ACConnect() -> i32;
+    }
+}

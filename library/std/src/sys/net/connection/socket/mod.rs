@@ -31,6 +31,10 @@ cfg_select! {
         mod windows;
         pub use windows::*;
     }
+    target_os = "cafe" => {
+        mod cafe;
+        pub use cafe::*;
+    }
     _ => {}
 }
 
@@ -52,7 +56,9 @@ use netc as c;
 // so we need to clamp to i32::MAX.
 const MAX_SEND_LEN: usize =
     cfg_select! {
-        any(target_vendor = "apple", target_os = "nto", target_os = "qnx") => c_int::MAX as usize,
+        any(target_vendor = "apple", target_os = "nto", target_os = "qnx", target_os = "cafe") => {
+            c_int::MAX as usize
+        }
         target_os = "windows" => i32::MAX as usize,
         _ => libc::ssize_t::MAX as usize,
     };
@@ -412,11 +418,13 @@ impl TcpStream {
         Ok(TcpStream { inner: sock })
     }
 
+    #[cfg_attr(target_os = "cafe", expect(dead_code))]
     #[inline]
     pub fn socket(&self) -> &Socket {
         &self.inner
     }
 
+    #[cfg_attr(target_os = "cafe", expect(dead_code))]
     pub fn into_socket(self) -> Socket {
         self.inner
     }
@@ -615,11 +623,13 @@ impl TcpListener {
         }
     }
 
+    #[cfg_attr(target_os = "cafe", expect(dead_code))]
     #[inline]
     pub fn socket(&self) -> &Socket {
         &self.inner
     }
 
+    #[cfg_attr(target_os = "cafe", expect(dead_code))]
     pub fn into_socket(self) -> Socket {
         self.inner
     }
@@ -710,11 +720,13 @@ impl UdpSocket {
         }
     }
 
+    #[cfg_attr(target_os = "cafe", expect(dead_code))]
     #[inline]
     pub fn socket(&self) -> &Socket {
         &self.inner
     }
 
+    #[cfg_attr(target_os = "cafe", expect(dead_code))]
     pub fn into_socket(self) -> Socket {
         self.inner
     }

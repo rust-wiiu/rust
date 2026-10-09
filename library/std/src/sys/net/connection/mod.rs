@@ -5,6 +5,7 @@ cfg_select! {
         target_os = "hermit",
         all(target_os = "wasi", any(target_env = "p2", target_env = "p3")),
         target_os = "solid_asp3",
+        target_os = "cafe",
     ) => {
         mod socket;
         pub use socket::*;
