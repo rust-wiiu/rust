@@ -398,8 +398,6 @@ dependencies = [
 [[package]]
 name = "unwinding"
 version = "0.2.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b134ada16dda9e435abe2a6d76a01d497bc60707357845a15f9b0ed42dc88ce"
 dependencies = [
  "gimli",
  "rustc-std-workspace-core",

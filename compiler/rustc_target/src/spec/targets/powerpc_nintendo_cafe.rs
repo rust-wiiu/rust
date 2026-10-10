@@ -1,7 +1,7 @@
 use rustc_abi::Endian;
 
 use crate::spec::{
-    Arch, Cc, CodeModel, LinkerFlavor, Lld, Os, PanicStrategy, RelocModel, Target, TargetMetadata,
+    Arch, Cc, CodeModel, LinkerFlavor, Lld, Os, RelocModel, Target, TargetMetadata,
     TargetOptions,
 };
 
@@ -38,7 +38,6 @@ pub(crate) fn target() -> Target {
             pre_link_args,
             relocation_model: RelocModel::Static,
             code_model: Some(CodeModel::Large),
-            panic_strategy: PanicStrategy::Abort,
             max_atomic_width: Some(32),
             supports_stack_protector: false,
             exe_suffix: ".elf".into(),

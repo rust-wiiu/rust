@@ -8,6 +8,10 @@ pub use unwinding::custom_eh_frame_finder::{
     EhFrameFinder, FrameInfo, FrameInfoKind, set_custom_eh_frame_finder,
 };
 
+// Use the unwinding crate as unwinder on Cafe OS
+#[cfg(target_os = "cafe")]
+use unwinding as _;
+
 pub use crate::types::*;
 
 pub type _Unwind_Ptr = *const u8;
