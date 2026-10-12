@@ -73,6 +73,9 @@ fortanix-sgx-abi = { version = "0.6.1", features = [
 [target.'cfg(target_os = "motor")'.dependencies]
 moto-rt = { version = "0.17", features = ['rustc-dep-of-std'], public = true }
 
+[target.'cfg(target_os = "cafe")'.dependencies]
+cafe-sys = { version = "0.3.1", features = ['rustc-dep-of-std'] }
+
 [target.'cfg(target_os = "hermit")'.dependencies]
 hermit-abi = { version = "0.5.3", features = [
     'rustc-dep-of-std',

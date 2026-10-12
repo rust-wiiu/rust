@@ -4,7 +4,6 @@ mod unsupported_common;
 
 pub use unsupported_common::{abort_internal, cleanup, init, unsupported, unsupported_err};
 
-pub mod abi;
 pub mod ticks;
 
 #[cfg(not(test))]
@@ -15,5 +14,5 @@ unsafe extern "C" fn __rpx_start(argc: i32, argv: *const *const u8) -> ! {
         fn main(argc: i32, argv: *const *const u8) -> i32;
     }
 
-    unsafe { abi::exit(main(argc, argv)) }
+    unsafe { cafe_sys::coreinit::exit::exit(main(argc, argv)) }
 }

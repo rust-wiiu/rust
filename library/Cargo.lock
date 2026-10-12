@@ -39,6 +39,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cafe-sys"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8363f17863e390f00aeca192e66c663a936071bc5cbec4771daaffd7c679a5a1"
+dependencies = [
+ "rustc-std-workspace-core",
+]
+
+[[package]]
 name = "cc"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -331,6 +340,7 @@ version = "0.0.0"
 dependencies = [
  "addr2line",
  "alloc",
+ "cafe-sys",
  "cfg-if",
  "core",
  "dlmalloc",

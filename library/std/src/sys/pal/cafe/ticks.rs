@@ -1,9 +1,10 @@
-use super::abi;
+use cafe_sys::coreinit::system_info;
+
 use crate::time::Duration;
 
 /// Frequency of the time base read by `OSGetTime` and `OSGetSystemTime`.
 pub fn ticks_per_second() -> u64 {
-    unsafe { u64::from((*abi::OSGetSystemInfo()).bus_clock_speed) / 4 }
+    unsafe { u64::from((*system_info::get_system_info()).bus_clock_speed) / 4 }
 }
 
 pub fn ticks_to_duration(ticks: u64) -> Duration {

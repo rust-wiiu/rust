@@ -1,4 +1,5 @@
-use crate::sys::pal::abi;
+use cafe_sys::coreinit::time;
+
 use crate::sys::pal::ticks::ticks_to_duration;
 use crate::time::Duration;
 
@@ -15,7 +16,7 @@ const CAFE_EPOCH_OFFSET: Duration = Duration::from_secs(946_684_800);
 
 impl Instant {
     pub fn now() -> Instant {
-        let ticks = unsafe { abi::OSGetSystemTime() };
+        let ticks = unsafe { time::get_system_time() };
         Instant(ticks_to_duration(u64::try_from(ticks).unwrap_or(0)))
     }
 
@@ -39,7 +40,7 @@ impl SystemTime {
 
     // Cafe OS returns local time, not UTC
     pub fn now() -> SystemTime {
-        let ticks = unsafe { abi::OSGetTime() };
+        let ticks = unsafe { time::get_time() };
         SystemTime(CAFE_EPOCH_OFFSET + ticks_to_duration(u64::try_from(ticks).unwrap_or(0)))
     }
 

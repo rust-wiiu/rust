@@ -1,11 +1,14 @@
+use cafe_sys::coreinit::mem::default_heap;
+
 use crate::alloc::Layout;
-use crate::sys::pal::abi;
+use crate::ptr;
 
 #[inline]
 pub unsafe fn alloc(layout: Layout) -> *mut u8 {
-    unsafe {
-        abi::MEMAllocFromDefaultHeapEx(layout.size() as u32, layout.align().max(4) as i32).cast()
-    }
+    let Some(alloc) = (unsafe { default_heap::ALLOC_FROM_DEFAULT_HEAP_EX }) else {
+        return ptr::null_mut();
+    };
+    unsafe { alloc(layout.size() as u32, layout.align().max(4) as i32).cast() }
 }
 
 #[inline]
@@ -19,7 +22,9 @@ pub unsafe fn alloc_zeroed(layout: Layout) -> *mut u8 {
 
 #[inline]
 pub unsafe fn dealloc(ptr: *mut u8, _layout: Layout) {
-    unsafe { abi::MEMFreeToDefaultHeap(ptr.cast()) }
+    if let Some(free) = unsafe { default_heap::FREE_TO_DEFAULT_HEAP } {
+        unsafe { free(ptr.cast()) }
+    }
 }
 
 #[inline]

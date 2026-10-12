@@ -1,14 +1,15 @@
+use cafe_sys::coreinit::launch;
+
 pub use super::common::Args;
 use crate::ffi::{CStr, OsString};
 use crate::sys::FromInner;
 use crate::sys::os_str::Buf;
-use crate::sys::pal::abi;
 use crate::{ptr, slice};
 
 pub fn args() -> Args {
     let mut argc = 0;
     let mut argv = ptr::null();
-    unsafe { abi::OSGetArgcArgv(&mut argc, &mut argv) };
+    unsafe { launch::get_argc_argv(&mut argc, &mut argv) };
     if argv.is_null() {
         return Args::new(Vec::new());
     }

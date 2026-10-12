@@ -1,5 +1,6 @@
+use cafe_sys::coreinit::debug;
+
 use crate::io;
-use crate::sys::pal::abi;
 
 pub struct Stdin;
 pub struct Stdout;
@@ -26,7 +27,7 @@ impl Stdout {
 impl io::Write for Stdout {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let len = buf.len().min(u32::MAX as usize);
-        unsafe { abi::OSConsoleWrite(buf.as_ptr(), len as u32) };
+        unsafe { debug::console_write(buf.as_ptr().cast(), len as u32) };
         Ok(len)
     }
 

@@ -1,4 +1,7 @@
-use self::netc::{MSG_PEEK, sockaddr, socklen_t};
+use cafe_sys::nn::ac;
+use cafe_sys::nsys::net::socket as sys;
+
+use self::netc::{sockaddr, socklen_t};
 use super::{getsockopt, setsockopt, socket_addr_from_c, socket_addr_to_c};
 use crate::ffi::{c_int, c_long};
 use crate::io::{self, BorrowedBuf, BorrowedCursor, IoSlice, IoSliceMut};
@@ -8,11 +11,85 @@ use crate::sys::pal::unsupported;
 use crate::time::Duration;
 use crate::{cmp, mem, ptr};
 
+/// POSIX names for the shared socket code, backed by `cafe_sys::nsys::net::socket`.
+#[expect(non_camel_case_types)]
 pub(super) mod netc {
-    use crate::ffi::{c_int, c_uint};
-    pub use crate::sys::pal::abi::sockets::*;
+    use cafe_sys::nsys::net::socket as sys;
 
-    pub const EMSGSIZE: c_int = SO_EMSGSIZE;
+    use crate::ffi::{c_char, c_int, c_uint, c_void};
+
+    pub type sa_family_t = u16;
+    pub type socklen_t = sys::SockLen;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct sockaddr {
+        pub sa_family: sa_family_t,
+        pub sa_data: [c_char; 14],
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct in_addr {
+        pub s_addr: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct sockaddr_in {
+        pub sin_family: sa_family_t,
+        pub sin_port: u16,
+        pub sin_addr: in_addr,
+        pub sin_zero: [u8; 8],
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct ip_mreq {
+        pub imr_multiaddr: in_addr,
+        pub imr_interface: in_addr,
+    }
+
+    #[repr(C)]
+    pub struct addrinfo {
+        pub ai_flags: c_int,
+        pub ai_family: c_int,
+        pub ai_socktype: c_int,
+        pub ai_protocol: c_int,
+        pub ai_addrlen: socklen_t,
+        pub ai_canonname: *mut c_char,
+        pub ai_addr: *mut sockaddr,
+        pub ai_next: *mut addrinfo,
+    }
+
+    const _: () = {
+        assert!(size_of::<sockaddr>() == size_of::<sys::SockAddr>());
+        assert!(size_of::<sockaddr_in>() == size_of::<sys::SockAddrIn>());
+        assert!(size_of::<addrinfo>() == size_of::<sys::AddrInfo>());
+    };
+
+    pub const AF_INET: c_int = sys::Family::INET.0;
+    pub const SOCK_STREAM: c_int = sys::Type::STREAM.0;
+    pub const SOCK_DGRAM: c_int = sys::Type::DATAGRAM.0;
+    pub const SOL_SOCKET: c_int = sys::Level::Socket as c_int;
+    pub const IPPROTO_IP: c_int = sys::Level::Ip as c_int;
+    pub const IPPROTO_TCP: c_int = sys::Level::Tcp as c_int;
+
+    pub const SO_REUSEADDR: c_int = sys::SockOpt::Reuseaddr as c_int;
+    pub const SO_KEEPALIVE: c_int = sys::SockOpt::Keepalive as c_int;
+    pub const SO_BROADCAST: c_int = sys::SockOpt::Broadcast as c_int;
+    pub const SO_LINGER: c_int = sys::SockOpt::Linger as c_int;
+    pub const SO_ERROR: c_int = sys::SockOpt::Lasterror as c_int;
+    pub const SO_NONBLOCK: c_int = sys::SockOpt::Nonblock as c_int;
+    pub const IP_TTL: c_int = sys::SockOpt::IP_TTL as c_int;
+    pub const TCP_NODELAY: c_int = sys::SockOpt::TcpNodelay as c_int;
+
+    pub const IP_MULTICAST_TTL: c_int = sys::SockOpt::IpMulticastTtl as c_int;
+    pub const IP_MULTICAST_LOOP: c_int = sys::SockOpt::IpMulticastLoop as c_int;
+    pub const IP_ADD_MEMBERSHIP: c_int = sys::SockOpt::IpAddMembership as c_int;
+    pub const IP_DROP_MEMBERSHIP: c_int = sys::SockOpt::IpDropMembership as c_int;
+
+    pub const EMSGSIZE: c_int = sys::Error::EMSGSIZE.0;
 
     // nsysnet only supports IPv4. The shared socket code still needs the IPv6
     // items, so they use the Linux values, and `Socket::new` rejects AF_INET6.
@@ -59,13 +136,120 @@ pub(super) mod netc {
         pub ss_family: sa_family_t,
         pub ss_data: [u8; 14],
     }
+
+    /// Returned instead of `-1` for options that `sys::SockOpt` cannot express.
+    /// `cvt` turns it into `ENOPROTOOPT`, since `socketlasterr` is not set.
+    pub const UNSUPPORTED_OPTION: c_int = c_int::MIN;
+
+    fn sockopt(level: c_int, name: c_int) -> Option<(sys::Level, sys::SockOpt)> {
+        let level = match level {
+            SOL_SOCKET => sys::Level::Socket,
+            IPPROTO_IP => sys::Level::Ip,
+            IPPROTO_TCP => sys::Level::Tcp,
+            _ => return None,
+        };
+        let name = match name {
+            // Also `IP_TTL`.
+            SO_REUSEADDR => sys::SockOpt::Reuseaddr,
+            SO_KEEPALIVE => sys::SockOpt::Keepalive,
+            SO_BROADCAST => sys::SockOpt::Broadcast,
+            SO_LINGER => sys::SockOpt::Linger,
+            SO_ERROR => sys::SockOpt::Lasterror,
+            SO_NONBLOCK => sys::SockOpt::Nonblock,
+            TCP_NODELAY => sys::SockOpt::TcpNodelay,
+            IP_MULTICAST_TTL => sys::SockOpt::IpMulticastTtl,
+            IP_MULTICAST_LOOP => sys::SockOpt::IpMulticastLoop,
+            IP_ADD_MEMBERSHIP => sys::SockOpt::IpAddMembership,
+            IP_DROP_MEMBERSHIP => sys::SockOpt::IpDropMembership,
+            _ => return None,
+        };
+        Some((level, name))
+    }
+
+    pub unsafe fn setsockopt(
+        fd: c_int,
+        level: c_int,
+        name: c_int,
+        value: *const c_void,
+        len: socklen_t,
+    ) -> c_int {
+        match sockopt(level, name) {
+            Some((level, name)) => unsafe { sys::set_sockopt(fd, level, name, value, len) },
+            None => UNSUPPORTED_OPTION,
+        }
+    }
+
+    pub unsafe fn getsockopt(
+        fd: c_int,
+        level: c_int,
+        name: c_int,
+        value: *mut c_void,
+        len: *mut socklen_t,
+    ) -> c_int {
+        match sockopt(level, name) {
+            Some((level, name)) => unsafe { sys::get_sockopt(fd, level, name, value, len) },
+            None => UNSUPPORTED_OPTION,
+        }
+    }
+
+    pub unsafe fn connect(fd: c_int, addr: *const sockaddr, len: socklen_t) -> c_int {
+        unsafe { sys::connect(fd, addr.cast(), len) }
+    }
+
+    pub unsafe fn bind(fd: c_int, addr: *const sockaddr, len: socklen_t) -> c_int {
+        unsafe { sys::bind(fd, addr.cast(), len) }
+    }
+
+    pub unsafe fn listen(fd: c_int, backlog: c_int) -> c_int {
+        unsafe { sys::listen(fd, backlog) }
+    }
+
+    pub unsafe fn send(fd: c_int, buf: *const c_void, len: c_int, flags: c_int) -> c_int {
+        unsafe { sys::send(fd, buf, len, sys::MsgFlags(flags)) }
+    }
+
+    pub unsafe fn sendto(
+        fd: c_int,
+        buf: *const c_void,
+        len: c_int,
+        flags: c_int,
+        dest: *const sockaddr,
+        dest_len: socklen_t,
+    ) -> c_int {
+        unsafe { sys::sendto(fd, buf, len, sys::MsgFlags(flags), dest.cast(), dest_len) }
+    }
+
+    pub unsafe fn getpeername(fd: c_int, addr: *mut sockaddr, len: *mut socklen_t) -> c_int {
+        unsafe { sys::get_peername(fd, addr.cast(), len) }
+    }
+
+    pub unsafe fn getsockname(fd: c_int, addr: *mut sockaddr, len: *mut socklen_t) -> c_int {
+        unsafe { sys::get_sockname(fd, addr.cast(), len) }
+    }
+
+    pub unsafe fn getaddrinfo(
+        node: *const c_char,
+        service: *const c_char,
+        hints: *const addrinfo,
+        res: *mut *mut addrinfo,
+    ) -> c_int {
+        unsafe { sys::get_addr_info(node, service, hints.cast(), res.cast()).0 }
+    }
+
+    pub unsafe fn freeaddrinfo(res: *mut addrinfo) {
+        unsafe { sys::free_addr_info(res.cast()) }
+    }
 }
 
 #[expect(non_camel_case_types)]
 pub type wrlen_t = c_int;
 
 pub fn cvt(ret: c_int) -> io::Result<c_int> {
-    if ret < 0 { Err(last_error()) } else { Ok(ret) }
+    match ret {
+        netc::UNSUPPORTED_OPTION => Err(io::Error::from_raw_os_error(sys::Error::ENOPROTOOPT.0)),
+        ..0 => Err(last_error()),
+        _ => Ok(ret),
+    }
 }
 
 pub fn cvt_r(f: impl FnOnce() -> c_int) -> io::Result<c_int> {
@@ -74,30 +258,32 @@ pub fn cvt_r(f: impl FnOnce() -> c_int) -> io::Result<c_int> {
 
 pub fn cvt_gai(err: c_int) -> io::Result<()> {
     use io::ErrorKind::Uncategorized;
-    Err(match err {
-        0 => return Ok(()),
-        netc::EAI_AGAIN => io::const_error!(Uncategorized, "temporary failure in name resolution"),
-        netc::EAI_FAIL => {
+    Err(match sys::AiError(err) {
+        sys::AiError::SUCCESS => return Ok(()),
+        sys::AiError::AGAIN => {
+            io::const_error!(Uncategorized, "temporary failure in name resolution")
+        }
+        sys::AiError::FAIL => {
             io::const_error!(Uncategorized, "non-recoverable failure in name resolution")
         }
-        netc::EAI_MEMORY => io::const_error!(Uncategorized, "memory allocation failure"),
-        netc::EAI_NONAME => io::const_error!(Uncategorized, "name or service not known"),
+        sys::AiError::MEMORY => io::const_error!(Uncategorized, "memory allocation failure"),
+        sys::AiError::NONAME => io::const_error!(Uncategorized, "name or service not known"),
         _ => io::const_error!(Uncategorized, "failed to look up address information"),
     })
 }
 
 fn last_error() -> io::Error {
-    io::Error::from_raw_os_error(unsafe { netc::socketlasterr() })
+    io::Error::from_raw_os_error(unsafe { sys::last_error() }.0)
 }
 
-fn to_timeval(dur: Duration) -> netc::timeval {
+fn to_timeval(dur: Duration) -> sys::TimeVal {
     // SOSelect rejects components above 999999.
-    let mut tv = netc::timeval {
-        tv_sec: dur.as_secs().min(999_999) as c_long,
-        tv_usec: dur.subsec_micros() as c_long,
+    let mut tv = sys::TimeVal {
+        sec: dur.as_secs().min(999_999) as c_long,
+        usec: dur.subsec_micros() as c_long,
     };
-    if tv.tv_sec == 0 && tv.tv_usec == 0 {
-        tv.tv_usec = 1;
+    if tv.sec == 0 && tv.usec == 0 {
+        tv.usec = 1;
     }
     tv
 }
@@ -105,11 +291,11 @@ fn to_timeval(dur: Duration) -> netc::timeval {
 pub fn init() {
     static INIT: Once = Once::new();
     INIT.call_once(|| unsafe {
-        netc::socket_lib_init();
+        sys::init();
         // Brings up the console's configured connection. If that fails, the
         // socket calls report the error.
-        netc::ACInitialize();
-        netc::ACConnect();
+        ac::init();
+        ac::connect();
     });
 }
 
@@ -120,7 +306,8 @@ impl Socket {
         if family != netc::AF_INET {
             return Err(io::const_error!(io::ErrorKind::Unsupported, "only IPv4 is supported"));
         }
-        cvt(unsafe { netc::socket(family, ty, 0) }).map(Socket)
+        cvt(unsafe { sys::socket(sys::Family(family), sys::Type(ty), sys::Protocol::IP) })
+            .map(Socket)
     }
 
     pub fn connect(&self, addr: &SocketAddr) -> io::Result<()> {
@@ -141,14 +328,14 @@ impl Socket {
         self.set_nonblocking(false)?;
         match r {
             Ok(()) => return Ok(()),
-            Err(e) if e.raw_os_error() == Some(netc::SO_EINPROGRESS) => {}
+            Err(e) if e.raw_os_error() == Some(sys::Error::EINPROGRESS.0) => {}
             Err(e) => return Err(e),
         }
 
-        let mut writefds = netc::fd_set { fd_bits: 1 << self.0 };
+        let mut writefds = sys::FdSet { bits: 1 << self.0 };
         let mut timeout = to_timeval(timeout);
         let n = cvt(unsafe {
-            netc::select(self.0 + 1, ptr::null_mut(), &mut writefds, ptr::null_mut(), &mut timeout)
+            sys::select(self.0 + 1, ptr::null_mut(), &mut writefds, ptr::null_mut(), &mut timeout)
         })?;
         if n == 0 {
             return Err(io::const_error!(io::ErrorKind::TimedOut, "connection timed out"));
@@ -160,34 +347,34 @@ impl Socket {
     }
 
     pub fn accept(&self, storage: *mut sockaddr, len: *mut socklen_t) -> io::Result<Socket> {
-        cvt(unsafe { netc::accept(self.0, storage, len) }).map(Socket)
+        cvt(unsafe { sys::accept(self.0, storage.cast(), len) }).map(Socket)
     }
 
     pub fn duplicate(&self) -> io::Result<Socket> {
         unsupported()
     }
 
-    fn recv_with_flags(&self, mut buf: BorrowedCursor<'_, u8>, flags: c_int) -> io::Result<()> {
+    fn recv_with_flags(&self, mut buf: BorrowedCursor<'_, u8>, flags: sys::MsgFlags) -> io::Result<()> {
         let len = cmp::min(buf.capacity(), c_int::MAX as usize) as c_int;
-        let ret = cvt(unsafe { netc::recv(self.0, buf.as_mut().as_mut_ptr().cast(), len, flags) })?;
+        let ret = cvt(unsafe { sys::recv(self.0, buf.as_mut().as_mut_ptr().cast(), len, flags) })?;
         unsafe { buf.advance(ret as usize) };
         Ok(())
     }
 
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         let mut buf = BorrowedBuf::from(buf);
-        self.recv_with_flags(buf.unfilled(), 0)?;
+        self.recv_with_flags(buf.unfilled(), sys::MsgFlags::NONE)?;
         Ok(buf.len())
     }
 
     pub fn peek(&self, buf: &mut [u8]) -> io::Result<usize> {
         let mut buf = BorrowedBuf::from(buf);
-        self.recv_with_flags(buf.unfilled(), MSG_PEEK)?;
+        self.recv_with_flags(buf.unfilled(), sys::MsgFlags::PEEK)?;
         Ok(buf.len())
     }
 
     pub fn read_buf(&self, buf: BorrowedCursor<'_, u8>) -> io::Result<()> {
-        self.recv_with_flags(buf, 0)
+        self.recv_with_flags(buf, sys::MsgFlags::NONE)
     }
 
     pub fn read_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
@@ -202,13 +389,13 @@ impl Socket {
     fn recv_from_with_flags(
         &self,
         buf: &mut [u8],
-        flags: c_int,
+        flags: sys::MsgFlags,
     ) -> io::Result<(usize, SocketAddr)> {
         let mut storage: netc::sockaddr_storage = unsafe { mem::zeroed() };
         let mut addrlen = size_of_val(&storage) as socklen_t;
         let len = cmp::min(buf.len(), c_int::MAX as usize) as c_int;
         let n = cvt(unsafe {
-            netc::recvfrom(
+            sys::recvfrom(
                 self.0,
                 buf.as_mut_ptr().cast(),
                 len,
@@ -221,16 +408,16 @@ impl Socket {
     }
 
     pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        self.recv_from_with_flags(buf, 0)
+        self.recv_from_with_flags(buf, sys::MsgFlags::NONE)
     }
 
     pub fn peek_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        self.recv_from_with_flags(buf, MSG_PEEK)
+        self.recv_from_with_flags(buf, sys::MsgFlags::PEEK)
     }
 
     fn send(&self, buf: &[u8]) -> io::Result<usize> {
         let len = cmp::min(buf.len(), c_int::MAX as usize) as c_int;
-        cvt(unsafe { netc::send(self.0, buf.as_ptr().cast(), len, 0) }).map(|n| n as usize)
+        cvt(unsafe { sys::send(self.0, buf.as_ptr().cast(), len, sys::MsgFlags::NONE) }).map(|n| n as usize)
     }
 
     pub fn write_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
@@ -252,24 +439,24 @@ impl Socket {
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         let how = match how {
-            Shutdown::Write => netc::SHUT_WR,
-            Shutdown::Read => netc::SHUT_RD,
-            Shutdown::Both => netc::SHUT_RDWR,
+            Shutdown::Write => sys::Shutdown::Write,
+            Shutdown::Read => sys::Shutdown::Read,
+            Shutdown::Both => sys::Shutdown::ReadWrite,
         };
-        cvt(unsafe { netc::shutdown(self.0, how) }).map(drop)
+        cvt(unsafe { sys::shutdown(self.0, how) }).map(drop)
     }
 
     pub fn set_linger(&self, linger: Option<Duration>) -> io::Result<()> {
-        let linger = netc::linger {
-            l_onoff: linger.is_some() as c_int,
-            l_linger: linger.unwrap_or_default().as_secs().try_into().unwrap_or(c_int::MAX),
+        let linger = sys::Linger {
+            onoff: linger.is_some() as c_int,
+            linger: linger.unwrap_or_default().as_secs().try_into().unwrap_or(c_int::MAX),
         };
         unsafe { setsockopt(self, netc::SOL_SOCKET, netc::SO_LINGER, linger) }
     }
 
     pub fn linger(&self) -> io::Result<Option<Duration>> {
-        let val: netc::linger = unsafe { getsockopt(self, netc::SOL_SOCKET, netc::SO_LINGER)? };
-        Ok((val.l_onoff != 0).then(|| Duration::from_secs(val.l_linger as u64)))
+        let val: sys::Linger = unsafe { getsockopt(self, netc::SOL_SOCKET, netc::SO_LINGER)? };
+        Ok((val.onoff != 0).then(|| Duration::from_secs(val.linger as u64)))
     }
 
     pub fn set_keepalive(&self, keepalive: bool) -> io::Result<()> {
@@ -306,6 +493,6 @@ impl Socket {
 
 impl Drop for Socket {
     fn drop(&mut self) {
-        unsafe { netc::socketclose(self.0) };
+        unsafe { sys::close(self.0) };
     }
 }

@@ -1,14 +1,17 @@
+use cafe_sys::coreinit::fs::{
+    self, CmdBlock, DirHandle, ErrorFlag, FileHandle, MAX_PATH, Stat, StatFlags, Status,
+};
+
 use crate::cell::UnsafeCell;
 use crate::ffi::{CStr, OsString};
 use crate::fs::TryLockError;
 use crate::io::{self, BorrowedCursor, IoSlice, IoSliceMut, SeekFrom};
-use crate::mem::MaybeUninit;
+use crate::mem::{self, MaybeUninit};
 use crate::path::{Path, PathBuf};
 use crate::sync::{Arc, OnceLock};
 use crate::sys::fs::common::NOT_FILE_ERROR;
 use crate::sys::helpers::run_path_with_cstr;
 use crate::sys::os_str::Buf;
-use crate::sys::pal::abi::{self, FS_RET_ALL_ERROR, FSClient, FSCmdBlock, FSStat};
 use crate::sys::time::SystemTime;
 use crate::sys::{FromInner, unsupported, unsupported_err};
 use crate::time::Duration;
@@ -24,20 +27,24 @@ pub use unsupported_fs::{
 
 pub use crate::sys::fs::common::{exists, remove_dir_all};
 
-struct Client(UnsafeCell<FSClient>);
+const STAT_CTIME: StatFlags = StatFlags(0x0800_0000);
+const STAT_MTIME: StatFlags = StatFlags(0x0400_0000);
+const MAX_MOUNTPATH_SIZE: usize = 128;
+
+struct Client(UnsafeCell<fs::Client>);
 
 // SAFETY: The FS library queues the commands of each client, so threads can
 // share one client as long as every command uses its own command block.
 unsafe impl Sync for Client {}
 
-static CLIENT: Client = Client(UnsafeCell::new(FSClient::ZEROED));
+static CLIENT: Client = Client(UnsafeCell::new(unsafe { mem::zeroed() }));
 
-fn client() -> io::Result<*mut FSClient> {
-    static STATUS: OnceLock<i32> = OnceLock::new();
+fn client() -> io::Result<*mut fs::Client> {
+    static STATUS: OnceLock<Status> = OnceLock::new();
     let status = *STATUS.get_or_init(|| unsafe {
-        abi::FSInit();
-        let status = abi::FSAddClient(CLIENT.0.get(), FS_RET_ALL_ERROR);
-        if status == 0 {
+        fs::init();
+        let status = fs::add_client(CLIENT.0.get(), ErrorFlag::ALL);
+        if status == Status::SUCCESS {
             mount_sd_card(CLIENT.0.get());
         }
         status
@@ -50,69 +57,69 @@ fn client() -> io::Result<*mut FSClient> {
 /// are ignored, since there might be no SD card.
 ///
 /// `client` must be a registered client.
-unsafe fn mount_sd_card(client: *mut FSClient) {
-    let mut block = MaybeUninit::<FSCmdBlock>::uninit();
-    let mut source = MaybeUninit::<abi::FSMountSource>::uninit();
-    let mut target = [0; abi::FS_MAX_MOUNTPATH_SIZE];
+unsafe fn mount_sd_card(client: *mut fs::Client) {
+    let mut block = MaybeUninit::<CmdBlock>::uninit();
+    let mut source = MaybeUninit::<fs::MountSource>::uninit();
+    let mut target = [0; MAX_MOUNTPATH_SIZE];
     unsafe {
-        abi::FSInitCmdBlock(block.as_mut_ptr());
-        let status = abi::FSGetMountSource(
+        fs::init_cmd_block(block.as_mut_ptr());
+        let status = fs::get_mount_source(
             client,
             block.as_mut_ptr(),
-            abi::FS_SOURCETYPE_EXTERNAL,
+            fs::MountSourceType::SD,
             source.as_mut_ptr(),
-            FS_RET_ALL_ERROR,
+            ErrorFlag::ALL,
         );
-        if status == 0 {
-            abi::FSMount(
+        if status == Status::SUCCESS {
+            fs::mount(
                 client,
                 block.as_mut_ptr(),
                 source.as_mut_ptr(),
                 target.as_mut_ptr(),
                 target.len() as u32,
-                FS_RET_ALL_ERROR,
+                ErrorFlag::ALL,
             );
         }
     }
 }
 
 /// Issues one synchronous FS command and returns its raw status.
-fn call(f: impl FnOnce(*mut FSClient, *mut FSCmdBlock) -> i32) -> io::Result<i32> {
+fn call(f: impl FnOnce(*mut fs::Client, *mut CmdBlock) -> Status) -> io::Result<Status> {
     let client = client()?;
-    let mut block = MaybeUninit::<FSCmdBlock>::uninit();
-    unsafe { abi::FSInitCmdBlock(block.as_mut_ptr()) };
+    let mut block = MaybeUninit::<CmdBlock>::uninit();
+    unsafe { fs::init_cmd_block(block.as_mut_ptr()) };
     Ok(f(client, block.as_mut_ptr()))
 }
 
-fn run(f: impl FnOnce(*mut FSClient, *mut FSCmdBlock) -> i32) -> io::Result<u32> {
+fn run(f: impl FnOnce(*mut fs::Client, *mut CmdBlock) -> Status) -> io::Result<u32> {
     cvt(call(f)?)
 }
 
-fn cvt(status: i32) -> io::Result<u32> {
+fn cvt(status: Status) -> io::Result<u32> {
     use io::ErrorKind::*;
     Err(match status {
-        0.. => return Ok(status as u32),
-        abi::FS_STATUS_ALREADY_OPEN => io::const_error!(ResourceBusy, "file is already open"),
-        abi::FS_STATUS_EXISTS => io::const_error!(AlreadyExists, "file exists"),
-        abi::FS_STATUS_NOT_FOUND => io::const_error!(NotFound, "no such file or directory"),
-        abi::FS_STATUS_NOT_FILE => io::const_error!(IsADirectory, "is a directory"),
-        abi::FS_STATUS_NOT_DIR => io::const_error!(NotADirectory, "not a directory"),
-        abi::FS_STATUS_PERMISSION_ERROR => io::const_error!(PermissionDenied, "permission denied"),
-        abi::FS_STATUS_FILE_TOO_BIG => io::const_error!(FileTooLarge, "file too large"),
-        abi::FS_STATUS_STORAGE_FULL => io::const_error!(StorageFull, "no space left on device"),
-        abi::FS_STATUS_UNSUPPORTED_CMD => io::const_error!(Unsupported, "operation not supported"),
-        abi::FS_STATUS_WRITE_PROTECTED => {
+        Status(n @ 0..) => return Ok(n as u32),
+        Status::ALREADY_OPEN => io::const_error!(ResourceBusy, "file is already open"),
+        Status::EXISTS => io::const_error!(AlreadyExists, "file exists"),
+        Status::NOT_FOUND => io::const_error!(NotFound, "no such file or directory"),
+        Status::NOT_FILE => io::const_error!(IsADirectory, "is a directory"),
+        Status::NOT_DIR => io::const_error!(NotADirectory, "not a directory"),
+        Status::PERMISSION_ERROR => io::const_error!(PermissionDenied, "permission denied"),
+        Status::FILE_TOO_BIG => io::const_error!(FileTooLarge, "file too large"),
+        Status::STORAGE_FULL => io::const_error!(StorageFull, "no space left on device"),
+        Status::UNSUPPORTED_CMD => io::const_error!(Unsupported, "operation not supported"),
+        Status::WRITE_PROTECTED => {
             io::const_error!(ReadOnlyFilesystem, "media is write protected")
         }
-        abi::FS_STATUS_MAX => io::const_error!(Uncategorized, "too many open files"),
-        abi::FS_STATUS_ACCESS_ERROR => io::const_error!(Uncategorized, "bad file mode"),
+        Status::MAX => io::const_error!(Uncategorized, "too many open files"),
+        Status::ACCESS_ERROR => io::const_error!(Uncategorized, "bad file mode"),
         _ => io::const_error!(Uncategorized, "file system error"),
     })
 }
 
 fn with_path<T>(path: &Path, f: &dyn Fn(&CStr) -> io::Result<T>) -> io::Result<T> {
     run_path_with_cstr(path, &|path| {
-        if path.count_bytes() >= abi::FS_MAX_ARGPATH_SIZE {
+        if path.count_bytes() >= MAX_PATH {
             return Err(io::const_error!(io::ErrorKind::InvalidFilename, "path is too long"));
         }
         f(path)
@@ -146,21 +153,21 @@ fn fs_time(valid: bool, micros: u64) -> io::Result<SystemTime> {
 }
 
 pub struct File {
-    handle: i32,
+    handle: FileHandle,
 }
 
 #[derive(Clone)]
-pub struct FileAttr(FSStat);
+pub struct FileAttr(Stat);
 
 pub struct ReadDir {
-    handle: i32,
+    handle: DirHandle,
     root: Arc<Path>,
 }
 
 pub struct DirEntry {
     root: Arc<Path>,
     name: OsString,
-    stat: FSStat,
+    stat: Stat,
 }
 
 #[derive(Clone, Debug)]
@@ -192,15 +199,15 @@ impl FileAttr {
     }
 
     pub fn perm(&self) -> FilePermissions {
-        FilePermissions { readonly: self.0.permission & 0x222 == 0 }
+        FilePermissions { readonly: self.0.mode.0 & 0x222 == 0 }
     }
 
     pub fn file_type(&self) -> FileType {
-        FileType { is_dir: self.0.flag & abi::FS_STAT_DIRECTORY != 0 }
+        FileType { is_dir: self.0.flags.contains(StatFlags::DIRECTORY) }
     }
 
     pub fn modified(&self) -> io::Result<SystemTime> {
-        fs_time(self.0.flag & abi::FS_STAT_MTIME != 0, self.0.mtime)
+        fs_time(self.0.flags.contains(STAT_MTIME), self.0.modified)
     }
 
     pub fn accessed(&self) -> io::Result<SystemTime> {
@@ -208,7 +215,7 @@ impl FileAttr {
     }
 
     pub fn created(&self) -> io::Result<SystemTime> {
-        fs_time(self.0.flag & abi::FS_STAT_CTIME != 0, self.0.ctime)
+        fs_time(self.0.flags.contains(STAT_CTIME), self.0.created)
     }
 }
 
@@ -247,11 +254,11 @@ impl Iterator for ReadDir {
 
     fn next(&mut self) -> Option<io::Result<DirEntry>> {
         loop {
-            let mut entry = MaybeUninit::<abi::FSDirEntry>::uninit();
+            let mut entry = MaybeUninit::<fs::DirectoryEntry>::uninit();
             let status = match call(|c, b| unsafe {
-                abi::FSReadDir(c, b, self.handle, entry.as_mut_ptr(), FS_RET_ALL_ERROR)
+                fs::read_dir(c, b, self.handle, entry.as_mut_ptr(), ErrorFlag::ALL)
             }) {
-                Ok(abi::FS_STATUS_END) => return None,
+                Ok(Status::END) => return None,
                 Ok(status) => status,
                 Err(e) => return Some(Err(e)),
             };
@@ -267,7 +274,7 @@ impl Iterator for ReadDir {
             return Some(Ok(DirEntry {
                 root: self.root.clone(),
                 name: OsString::from_inner(Buf { inner: name.to_vec() }),
-                stat: entry.stat,
+                stat: entry.info,
             }));
         }
     }
@@ -275,7 +282,7 @@ impl Iterator for ReadDir {
 
 impl Drop for ReadDir {
     fn drop(&mut self) {
-        let _ = call(|c, b| unsafe { abi::FSCloseDir(c, b, self.handle, FS_RET_ALL_ERROR) });
+        let _ = call(|c, b| unsafe { fs::close_dir(c, b, self.handle, ErrorFlag::ALL) });
     }
 }
 
@@ -376,23 +383,23 @@ impl File {
     }
 
     fn open_mode(path: &CStr, mode: &CStr) -> io::Result<File> {
-        let mut handle = 0;
+        let mut handle = FileHandle::INVALID;
         run(|c, b| unsafe {
-            abi::FSOpenFile(c, b, path.as_ptr(), mode.as_ptr(), &mut handle, FS_RET_ALL_ERROR)
+            fs::open_file(c, b, path.as_ptr(), mode.as_ptr(), &mut handle, ErrorFlag::ALL)
         })?;
         Ok(File { handle })
     }
 
     pub fn file_attr(&self) -> io::Result<FileAttr> {
-        let mut stat = MaybeUninit::<FSStat>::uninit();
+        let mut stat = MaybeUninit::<Stat>::uninit();
         run(|c, b| unsafe {
-            abi::FSGetStatFile(c, b, self.handle, stat.as_mut_ptr(), FS_RET_ALL_ERROR)
+            fs::get_stat_file(c, b, self.handle, stat.as_mut_ptr(), ErrorFlag::ALL)
         })?;
         Ok(FileAttr(unsafe { stat.assume_init() }))
     }
 
     pub fn fsync(&self) -> io::Result<()> {
-        run(|c, b| unsafe { abi::FSFlushFile(c, b, self.handle, FS_RET_ALL_ERROR) }).map(drop)
+        run(|c, b| unsafe { fs::flush_file(c, b, self.handle, ErrorFlag::ALL) }).map(drop)
     }
 
     pub fn datasync(&self) -> io::Result<()> {
@@ -424,7 +431,7 @@ impl File {
         let len = self.file_attr()?.size();
         if size < len {
             self.set_pos(size)?;
-            run(|c, b| unsafe { abi::FSTruncateFile(c, b, self.handle, FS_RET_ALL_ERROR) })?;
+            run(|c, b| unsafe { fs::truncate_file(c, b, self.handle, ErrorFlag::ALL) })?;
         } else if size > len {
             // FSTruncateFile cuts the file at the current position, so it cannot grow it.
             self.set_pos(len)?;
@@ -463,7 +470,7 @@ impl File {
 
     fn read_raw(&self, dest: *mut u8, len: usize) -> io::Result<usize> {
         let n = run(|c, b| unsafe {
-            abi::FSReadFile(c, b, dest.cast(), 1, len as u32, self.handle, 0, FS_RET_ALL_ERROR)
+            fs::read_file(c, b, dest.cast(), 1, len as u32, self.handle, 0, ErrorFlag::ALL)
         })?;
         Ok(n as usize)
     }
@@ -495,7 +502,7 @@ impl File {
 
     fn write_raw(&self, source: *const u8, len: usize) -> io::Result<usize> {
         let n = run(|c, b| unsafe {
-            abi::FSWriteFile(c, b, source.cast(), 1, len as u32, self.handle, 0, FS_RET_ALL_ERROR)
+            fs::write_file(c, b, source.cast(), 1, len as u32, self.handle, 0, ErrorFlag::ALL)
         })?;
         Ok(n as usize)
     }
@@ -526,7 +533,7 @@ impl File {
     fn set_pos(&self, pos: u64) -> io::Result<()> {
         let pos = u32::try_from(pos)
             .map_err(|_| io::const_error!(io::ErrorKind::InvalidInput, "position exceeds 4 GiB"))?;
-        run(|c, b| unsafe { abi::FSSetPosFile(c, b, self.handle, pos, FS_RET_ALL_ERROR) }).map(drop)
+        run(|c, b| unsafe { fs::set_pos_file(c, b, self.handle, pos, ErrorFlag::ALL) }).map(drop)
     }
 
     pub fn size(&self) -> Option<io::Result<u64>> {
@@ -535,7 +542,7 @@ impl File {
 
     pub fn tell(&self) -> io::Result<u64> {
         let mut pos = 0;
-        run(|c, b| unsafe { abi::FSGetPosFile(c, b, self.handle, &mut pos, FS_RET_ALL_ERROR) })?;
+        run(|c, b| unsafe { fs::get_pos_file(c, b, self.handle, &mut pos, ErrorFlag::ALL) })?;
         Ok(pos.into())
     }
 
@@ -554,7 +561,7 @@ impl File {
 
 impl Drop for File {
     fn drop(&mut self) {
-        let _ = call(|c, b| unsafe { abi::FSCloseFile(c, b, self.handle, FS_RET_ALL_ERROR) });
+        let _ = call(|c, b| unsafe { fs::close_file(c, b, self.handle, ErrorFlag::ALL) });
     }
 }
 
@@ -571,27 +578,27 @@ impl DirBuilder {
 
     pub fn mkdir(&self, path: &Path) -> io::Result<()> {
         with_path(path, &|path| {
-            run(|c, b| unsafe { abi::FSMakeDir(c, b, path.as_ptr(), FS_RET_ALL_ERROR) }).map(drop)
+            run(|c, b| unsafe { fs::make_dir(c, b, path.as_ptr(), ErrorFlag::ALL) }).map(drop)
         })
     }
 }
 
 fn stat_cstr(path: &CStr) -> io::Result<FileAttr> {
-    let mut stat = MaybeUninit::<FSStat>::uninit();
+    let mut stat = MaybeUninit::<Stat>::uninit();
     run(|c, b| unsafe {
-        abi::FSGetStat(c, b, path.as_ptr(), stat.as_mut_ptr(), FS_RET_ALL_ERROR)
+        fs::get_stat(c, b, path.as_ptr(), stat.as_mut_ptr(), ErrorFlag::ALL)
     })?;
     Ok(FileAttr(unsafe { stat.assume_init() }))
 }
 
 fn remove_cstr(path: &CStr) -> io::Result<()> {
-    run(|c, b| unsafe { abi::FSRemove(c, b, path.as_ptr(), FS_RET_ALL_ERROR) }).map(drop)
+    run(|c, b| unsafe { fs::remove(c, b, path.as_ptr(), ErrorFlag::ALL) }).map(drop)
 }
 
 pub fn readdir(path: &Path) -> io::Result<ReadDir> {
     let handle = with_path(path, &|path| {
-        let mut handle = 0;
-        run(|c, b| unsafe { abi::FSOpenDir(c, b, path.as_ptr(), &mut handle, FS_RET_ALL_ERROR) })?;
+        let mut handle = DirHandle::INVALID;
+        run(|c, b| unsafe { fs::open_dir(c, b, path.as_ptr(), &mut handle, ErrorFlag::ALL) })?;
         Ok(handle)
     })?;
     Ok(ReadDir { handle, root: Arc::from(path) })
@@ -624,7 +631,7 @@ pub fn rmdir(path: &Path) -> io::Result<()> {
 pub fn rename(old: &Path, new: &Path) -> io::Result<()> {
     with_path(old, &|old| {
         with_path(new, &|new| {
-            run(|c, b| unsafe { abi::FSRename(c, b, old.as_ptr(), new.as_ptr(), FS_RET_ALL_ERROR) })
+            run(|c, b| unsafe { fs::rename(c, b, old.as_ptr(), new.as_ptr(), ErrorFlag::ALL) })
                 .map(drop)
         })
     })
@@ -648,15 +655,9 @@ pub fn lstat(path: &Path) -> io::Result<FileAttr> {
 
 pub fn getcwd() -> io::Result<PathBuf> {
     // One spare byte, so the path is always nul-terminated.
-    let mut buf = [0u8; abi::FS_MAX_FULLPATH_SIZE + 1];
+    let mut buf = [0u8; MAX_PATH + 1];
     run(|c, b| unsafe {
-        abi::FSGetCwd(
-            c,
-            b,
-            buf.as_mut_ptr().cast(),
-            abi::FS_MAX_FULLPATH_SIZE as u32,
-            FS_RET_ALL_ERROR,
-        )
+        fs::get_cwd(c, b, buf.as_mut_ptr().cast(), MAX_PATH as u32, ErrorFlag::ALL)
     })?;
     let mut len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
     if len > 1 && buf[len - 1] == b'/' {
@@ -671,7 +672,7 @@ pub fn chdir(path: &Path) -> io::Result<()> {
         if !stat_cstr(path)?.file_type().is_dir() {
             return Err(io::const_error!(io::ErrorKind::NotADirectory, "not a directory"));
         }
-        run(|c, b| unsafe { abi::FSChangeDir(c, b, path.as_ptr(), FS_RET_ALL_ERROR) }).map(drop)
+        run(|c, b| unsafe { fs::change_dir(c, b, path.as_ptr(), ErrorFlag::ALL) }).map(drop)
     })
 }
 

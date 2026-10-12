@@ -1,7 +1,8 @@
+use cafe_sys::coreinit::thread;
+
 use crate::ptr;
 use crate::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::sync::atomic::{Atomic, AtomicPtr, AtomicUsize};
-use crate::sys::pal::abi;
 
 pub type Key = usize;
 type Dtor = unsafe extern "C" fn(*mut u8);
@@ -50,12 +51,12 @@ pub fn run_dtors() {
 
 #[inline]
 pub unsafe fn set(key: Key, value: *mut u8) {
-    unsafe { abi::OSSetThreadSpecific(key as i32, value.cast()) }
+    unsafe { thread::set_specific(key as i32, value.cast()) }
 }
 
 #[inline]
 pub unsafe fn get(key: Key) -> *mut u8 {
-    unsafe { abi::OSGetThreadSpecific(key as i32).cast() }
+    unsafe { thread::get_specific(key as i32).cast() }
 }
 
 #[inline]

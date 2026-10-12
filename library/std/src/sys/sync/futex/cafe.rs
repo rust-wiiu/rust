@@ -1,8 +1,11 @@
+use cafe_sys::coreinit::event::{self, Event, EventMode};
+use cafe_sys::coreinit::fast_mutex::{self, FAST_MUTEX_TAG, FastMutex};
+use cafe_sys::ffi;
+
 use crate::cell::UnsafeCell;
-use crate::ptr;
+use crate::{mem, ptr};
 use crate::sync::atomic::Atomic;
 use crate::sync::atomic::Ordering::Relaxed;
-use crate::sys::pal::abi;
 use crate::time::Duration;
 
 pub type Futex = Atomic<Primitive>;
@@ -15,13 +18,13 @@ pub type SmallPrimitive = u32;
 /// accessed while holding its bucket's lock.
 struct Waiter {
     futex: *const Atomic<u32>,
-    event: abi::OSEvent,
+    event: Event,
     next: *mut Waiter,
     woken: bool,
 }
 
 struct Bucket {
-    lock: UnsafeCell<abi::OSFastMutex>,
+    lock: UnsafeCell<FastMutex>,
     waiters: UnsafeCell<*mut Waiter>,
 }
 
@@ -32,7 +35,7 @@ struct BucketGuard(&'static Bucket);
 
 impl BucketGuard {
     fn lock(bucket: &'static Bucket) -> BucketGuard {
-        unsafe { abi::OSFastMutex_Lock(bucket.lock.get()) };
+        unsafe { fast_mutex::lock(bucket.lock.get()) };
         BucketGuard(bucket)
     }
 
@@ -43,15 +46,17 @@ impl BucketGuard {
 
 impl Drop for BucketGuard {
     fn drop(&mut self) {
-        unsafe { abi::OSFastMutex_Unlock(self.0.lock.get()) }
+        unsafe { fast_mutex::unlock(self.0.lock.get()) }
     }
 }
 
 const BUCKET_COUNT: usize = 64;
 
 static BUCKETS: [Bucket; BUCKET_COUNT] = [const {
+    let mut lock: FastMutex = unsafe { mem::zeroed() };
+    lock.tag = FAST_MUTEX_TAG;
     Bucket {
-        lock: UnsafeCell::new(abi::OSFastMutex::ZEROED),
+        lock: UnsafeCell::new(lock),
         waiters: UnsafeCell::new(ptr::null_mut()),
     }
 }; BUCKET_COUNT];
@@ -63,10 +68,10 @@ fn bucket(futex: &Atomic<u32>) -> &'static Bucket {
 pub fn futex_wait(futex: &Atomic<u32>, expected: u32, timeout: Option<Duration>) -> bool {
     let bucket = bucket(futex);
     let mut waiter =
-        Waiter { futex, event: abi::OSEvent::ZEROED, next: ptr::null_mut(), woken: false };
+        Waiter { futex, event: unsafe { mem::zeroed() }, next: ptr::null_mut(), woken: false };
     let waiter = &raw mut waiter;
     let event = unsafe { &raw mut (*waiter).event };
-    unsafe { abi::OSInitEvent(event, 0, abi::OS_EVENT_MANUAL) };
+    unsafe { event::init(event, ffi::FALSE, EventMode::MANUAL) };
 
     {
         let mut guard = BucketGuard::lock(bucket);
@@ -84,10 +89,10 @@ pub fn futex_wait(futex: &Atomic<u32>, expected: u32, timeout: Option<Duration>)
     }
 
     match timeout {
-        None => unsafe { abi::OSWaitEvent(event) },
+        None => unsafe { event::wait(event) },
         Some(dur) => {
             let nanos = i64::try_from(dur.as_nanos()).unwrap_or(i64::MAX);
-            unsafe { abi::OSWaitEventWithTimeout(event, nanos) };
+            unsafe { event::wait_with_timeout(event, nanos) };
         }
     }
 
@@ -132,7 +137,7 @@ fn wake(futex: &Atomic<u32>, all: bool) -> bool {
             }
             *cursor = (*waiter).next;
             (*waiter).woken = true;
-            abi::OSSignalEvent(&raw mut (*waiter).event);
+            event::signal(&raw mut (*waiter).event);
             woke = true;
             if !all {
                 break;

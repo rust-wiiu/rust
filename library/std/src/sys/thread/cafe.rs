@@ -1,33 +1,35 @@
+use cafe_sys::coreinit::core::get_core_count;
+use cafe_sys::coreinit::thread::{self, ThreadAttributes};
+use cafe_sys::ffi;
+
 use crate::alloc::Layout;
 use crate::ffi::{CStr, c_void};
 use crate::num::NonZero;
 // use crate::sync::Mutex;
-use crate::sys::pal::abi;
 use crate::sys::pal::ticks::duration_to_ticks;
 use crate::thread::ThreadInit;
 use crate::time::Duration;
 use crate::{io, ptr};
 
 pub fn sleep(dur: Duration) {
-    unsafe { abi::OSSleepTicks(duration_to_ticks(dur)) }
+    unsafe { thread::sleep_ticks(duration_to_ticks(dur)) }
 }
 
 pub fn yield_now() {
-    unsafe { abi::OSYieldThread() }
+    unsafe { thread::yield_() }
 }
 
 pub fn available_parallelism() -> io::Result<NonZero<usize>> {
-    let cores = unsafe { abi::OSGetCoreCount() } as usize;
+    let cores = unsafe { get_core_count() } as usize;
     NonZero::new(cores).ok_or(io::Error::UNKNOWN_THREAD_COUNT)
 }
 
 pub const DEFAULT_MIN_STACK_SIZE: usize = 1024 * 1024;
 
 const STACK_ALIGN: usize = 64;
-const OS_THREAD_ATTR_AFFINITY_NONE: u16 = 0x0007;
 
 pub struct Thread {
-    os: *mut abi::OSThread,
+    os: *mut thread::Thread,
 }
 
 unsafe impl Send for Thread {}
@@ -39,10 +41,10 @@ impl Thread {
         let stack_layout = Layout::from_size_align(stack_size, STACK_ALIGN).map_err(|_| {
             io::const_error!(io::ErrorKind::InvalidInput, "invalid thread stack size")
         })?;
-        let thread_layout = Layout::new::<abi::OSThread>();
+        let thread_layout = Layout::new::<thread::Thread>();
 
         let stack = unsafe { crate::sys::alloc::alloc(stack_layout) };
-        let thread = unsafe { crate::sys::alloc::alloc(thread_layout) }.cast::<abi::OSThread>();
+        let thread = unsafe { crate::sys::alloc::alloc(thread_layout) }.cast::<thread::Thread>();
 
         if stack.is_null() || thread.is_null() {
             unsafe {
@@ -58,18 +60,18 @@ impl Thread {
 
         let data = Box::into_raw(init);
         let created = unsafe {
-            abi::OSCreateThread(
+            thread::create(
                 thread,
-                thread_start,
+                Some(thread_start),
                 0,
                 data.cast(),
                 stack.byte_add(stack_size).cast(),
                 stack_size as u32,
-                abi::OSGetThreadPriority(abi::OSGetCurrentThread()),
-                OS_THREAD_ATTR_AFFINITY_NONE,
+                thread::get_priority(thread::get_current()),
+                ThreadAttributes::AFFINITY_ANY,
             )
         };
-        if created == 0 {
+        if created == ffi::FALSE {
             unsafe {
                 drop(Box::from_raw(data));
                 crate::sys::alloc::dealloc(stack, stack_layout);
@@ -79,8 +81,8 @@ impl Thread {
         }
 
         unsafe {
-            abi::OSSetThreadDeallocator(thread, free_thread);
-            abi::OSResumeThread(thread);
+            thread::set_deallocator(thread, Some(free_thread));
+            thread::resume(thread);
         }
         Ok(Thread { os: thread })
     }
@@ -88,23 +90,23 @@ impl Thread {
     pub fn join(self) {
         let thread = self.os;
         crate::mem::forget(self);
-        unsafe { abi::OSJoinThread(thread, ptr::null_mut()) };
+        unsafe { thread::join(thread, ptr::null_mut()) };
     }
 }
 
 impl Drop for Thread {
     fn drop(&mut self) {
-        unsafe { abi::OSDetachThread(self.os) }
+        unsafe { thread::detach(self.os) }
     }
 }
 
 /// Runs on an OS thread once the thread is released (joined, or detached and ended).
-extern "C" fn free_thread(thread: *mut abi::OSThread, stack_end: *mut c_void) {
+extern "C" fn free_thread(thread: *mut thread::Thread, stack_end: *mut c_void) {
     // The OS passes only the pointers, so the real layouts are unknown here.
     // The Cafe `dealloc` ignores the layout.
     let any = Layout::new::<()>();
     unsafe {
-        let name = abi::OSGetThreadName(thread);
+        let name = thread::get_name(thread);
         if !name.is_null() {
             crate::sys::alloc::dealloc(name.cast_mut().cast(), any);
         }
@@ -131,6 +133,6 @@ pub fn set_name(name: &CStr) {
     }
     unsafe {
         ptr::copy_nonoverlapping(bytes.as_ptr(), copy, bytes.len());
-        abi::OSSetThreadName(abi::OSGetCurrentThread(), copy.cast());
+        thread::set_name(thread::get_current(), copy.cast());
     }
 }
